@@ -28,8 +28,8 @@ import google.generativeai as genai
 GEMINI_API_KEY   = os.environ.get("GEMINI_API_KEY")
 WHATSAPP_TOKEN   = os.environ.get("WHATSAPP_TOKEN")
 PHONE_NUMBER_ID  = os.environ.get("PHONE_NUMBER_ID")
-VERIFY_TOKEN     = os.environ.get("VERIFY_TOKEN", "csa_verify_token")
-ADMIN_NUMBER     = os.environ.get("ADMIN_NUMBER", "923006498489")  # bina '+' aur bina space ke
+VERIFY_TOKEN     = os.environ.get("VERIFY_TOKEN", "csa2026secret")
+ADMIN_NUMBER     = os.environ.get("ADMIN_NUMBER", "17473176961")  # bina '+' aur bina space ke
 
 # Basic sanity check (Render logs mein dikhayega agar koi variable missing hai)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
