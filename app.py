@@ -25,7 +25,7 @@ import google.generativeai as genai
 # ------------------------------------------------------------------------
 # 1. CONFIGURATION -- Environment Variables se load ho raha hai
 # ------------------------------------------------------------------------
-GEMINI_API_KEY   = "AQ.Ab8RN6Li3HYERwCjGItfSOimORuC_6w6SADxRN4B6k6duC7e_A"
+GEMINI_API_KEY   = GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 WHATSAPP_TOKEN   = os.environ.get("WHATSAPP_TOKEN")
 PHONE_NUMBER_ID  = os.environ.get("PHONE_NUMBER_ID")
 VERIFY_TOKEN     = os.environ.get("VERIFY_TOKEN", "csa2026secret")
