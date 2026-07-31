@@ -23,7 +23,6 @@ from flask import Flask, request, jsonify
 from google import genai
 from google.genai import types
 
-# Client automatically reads GEMINI_API_KEY from environment variables
 client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
 
 # ------------------------------------------------------------------------
