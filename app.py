@@ -20,7 +20,11 @@ from datetime import datetime
 
 import requests
 from flask import Flask, request, jsonify
-import google.generativeai as genai
+from google import genai
+from google.genai import types
+
+# Client automatically reads GEMINI_API_KEY from environment variables
+client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
 
 # ------------------------------------------------------------------------
 # 1. CONFIGURATION -- Environment Variables se load ho raha hai
@@ -211,34 +215,21 @@ FALLBACK_MESSAGE = (
 # 4. GEMINI CALL
 # ------------------------------------------------------------------------
 def ask_gemini(phone_number: str, user_message: str) -> str:
-    """Gemini Flash ke system prompt + history + naya message bhejo."""
-    model = genai.GenerativeModel(
-        # Sahi Target Format:
-        model = genai.GenerativeModel("gemini-1.5-flash",
-        system_instruction=SYSTEM_PROMPT
-    )
-
-    history = CHAT_HISTORY.get(phone_number, [])
-
-    # Gemini chat format mein history convert karo
-    gemini_history = [
-        {"role": h["role"], "parts": [h["text"]]} for h in history
-    ]
-
+    """Send message to Gemini Flash using the new google-genai SDK."""
     try:
-        chat = model.start_chat(history=gemini_history)
-        response = chat.send_message(user_message)
+        response = client.models.generate_content(
+            model="gemini-1.5-flash",
+            contents=user_message,
+            config=types.GenerateContentConfig(
+                system_instruction=SYSTEM_PROMPT,
+            ),
+        )
         reply_text = response.text.strip()
+        return reply_text
     except Exception as e:
         log.error(f"Gemini API error: {e}")
-        return f"Mujhe abhi thodi dikkat ho rahi hai jawab dene mein."
+        return "Mujhe abhi thodi dikkat ho rahi hai jawab dene mein."
 
-    # History update karo
-    history.append({"role": "user", "text": user_message})
-    history.append({"role": "model", "text": reply_text})
-    CHAT_HISTORY[phone_number] = history[-(MAX_HISTORY_TURNS * 2):]
-
-    return reply_text
 
 
 
