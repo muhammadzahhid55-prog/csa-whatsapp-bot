@@ -211,14 +211,11 @@ FALLBACK_MESSAGE = (
 # 4. GEMINI CALL
 # ------------------------------------------------------------------------
 def ask_gemini(phone_number: str, user_message: str) -> str:
-    """Gemini Flash ko system prompt + history + naya message bhejo."""
+    """Gemini Flash ke system prompt + history + naya message bhejo."""
     model = genai.GenerativeModel(
-    model_name='gemini-1.5-flash',
-    system_instruction="Aap Concept Science Academy ke helpful assistant hain."
-)
-
- 
- 
+        model_name="gemini-1.5-flash",
+        system_instruction=SYSTEM_PROMPT
+    )
 
     history = CHAT_HISTORY.get(phone_number, [])
 
@@ -233,15 +230,15 @@ def ask_gemini(phone_number: str, user_message: str) -> str:
         reply_text = response.text.strip()
     except Exception as e:
         log.error(f"Gemini API error: {e}")
-        # Agar Gemini fail ho jaye to safe fallback -> handover
-        return f"Mujhe abhi thodi dikkat ho rahi hai jawab dene mein. {FALLBACK_MESSAGE} {HANDOVER_TAG}"
+        return f"Mujhe abhi thodi dikkat ho rahi hai jawab dene mein."
 
-    # History update karo (max N turns rakho)
+    # History update karo
     history.append({"role": "user", "text": user_message})
     history.append({"role": "model", "text": reply_text})
     CHAT_HISTORY[phone_number] = history[-(MAX_HISTORY_TURNS * 2):]
 
     return reply_text
+
 
 
 def contains_human_request(text: str) -> bool:
