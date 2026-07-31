@@ -213,9 +213,11 @@ FALLBACK_MESSAGE = (
 def ask_gemini(phone_number: str, user_message: str) -> str:
     """Gemini Flash ko system prompt + history + naya message bhejo."""
     model = genai.GenerativeModel(
-        genai.GenerativeModel("gemini-1.5-flash"),
-        system_instruction=SYSTEM_PROMPT,
- )
+    model_name='gemini-1.5-flash',
+    system_instruction="Aap Concept Science Academy ke helpful assistant hain."
+)
+
+ 
  
 
     history = CHAT_HISTORY.get(phone_number, [])
