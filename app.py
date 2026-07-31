@@ -118,14 +118,14 @@ _load_state()
 # taake galat info student ko na jaye.
 
 SYSTEM_PROMPT = """
-Tum "Concept Science Academy (CWL)" ke official WhatsApp AI Assistant ho.
+Tum "Concept Science Academy (KWL)" ke official WhatsApp AI Assistant ho.
 Tumhara kaam hai students aur parents ke sawalat ka friendly, polite aur
 concise andaz mein jawab dena — Roman Urdu ya English mein, jis language
 mein student baat kare usi mein reply karo (natural mix bhi chalay ga,
 jaise log Pakistan mein WhatsApp par likhte hain).
 
 === ACADEMY INFORMATION (Sirf yehi authoritative data hai) ===
-- Naam: Concept Science Academy (CWL)
+- Naam: Concept Science Academy (KWL)
 - Website: csakwl.com
 - Admin / WhatsApp Contact: +92-300-649-8489
 - Location: Khanewal, Punjab, Pakistan
@@ -155,7 +155,7 @@ confirm karne ke liye Admin se connect kara rahe ho.
   koi substantial jawab de rahe ho, jaise:
   "Koi aur sawal ho to zaroor poochein. 🙌
   Regards,
-  Concept Science Academy (CWL) Support"
+  Concept Science Academy (KWL) Support"
   (Chhoti greetings ya haan/na jawabon par yeh closing zaroori nahi.)
 
 === TUMHARE RULES (bohat zaroori) ===
@@ -203,7 +203,7 @@ FALLBACK_MESSAGE = (
     "Aapki request hamare live agent ko forward kar di gayi hai, wo jald "
     "hi is chat mein shamil ho kar aapki madad karein gay. 🙏\n\n"
     "Aap chahein to seedha bhi contact kar sakte hain: +92-300-649-8489\n\n"
-    "Regards,\nConcept Science Academy (CWL) Support"
+    "Regards,\nConcept Science Academy (KWL) Support"
 )
 
 
@@ -344,7 +344,7 @@ def handle_webhook():
                 resume_bot(target)
                 send_whatsapp_message(ADMIN_NUMBER, f"✅ Bot resumed for +{target}")
             else:
-                send_whatsapp_message(ADMIN_NUMBER, "Usage: /resume 923001234567")
+                send_whatsapp_message(ADMIN_NUMBER, "Usage: /resume 923006498489")
             return jsonify({"status": "ok"}), 200
 
         # ---- Agar yeh number pehle se paused hai, bot chup rahega ----
@@ -384,7 +384,7 @@ def handle_webhook():
 def health_check():
     return jsonify({
         "status": "running",
-        "academy": "Concept Science Academy (CWL)",
+        "academy": "Concept Science Academy (KWL)",
         "paused_users": len([k for k, v in HANDOVER_STATE.items() if v.get("paused")]),
     }), 200
 
