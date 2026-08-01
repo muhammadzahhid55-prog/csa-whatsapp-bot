@@ -1,6 +1,6 @@
 """
 ================================================================================
- Concept Science Academy (CWL) - WhatsApp Hybrid AI Chatbot
+ Concept Science Academy (KWL) - WhatsApp Hybrid AI Chatbot
 ================================================================================
 Stack: Python Flask + WhatsApp Cloud API (Meta) + Google Gemini 1.5 Flash
 Hosting: Render.com (Free Tier)
@@ -20,18 +20,15 @@ from datetime import datetime
 
 import requests
 from flask import Flask, request, jsonify
-from google import genai
-from google.genai import types
-
-client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
+import google.generativeai as genai
 
 # ------------------------------------------------------------------------
 # 1. CONFIGURATION -- Environment Variables se load ho raha hai
 # ------------------------------------------------------------------------
-GEMINI_API_KEY   = GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
+GEMINI_API_KEY   = os.environ.get("GEMINI_API_KEY")
 WHATSAPP_TOKEN   = os.environ.get("WHATSAPP_TOKEN")
 PHONE_NUMBER_ID  = os.environ.get("PHONE_NUMBER_ID")
-VERIFY_TOKEN     = os.environ.get("VERIFY_TOKEN", "csa2026secret")
+VERIFY_TOKEN     = os.environ.get("VERIFY_TOKEN", "csa_verify_token")
 ADMIN_NUMBER     = os.environ.get("ADMIN_NUMBER", "923006498489")  # bina '+' aur bina space ke
 
 # Basic sanity check (Render logs mein dikhayega agar koi variable missing hai)
@@ -214,22 +211,34 @@ FALLBACK_MESSAGE = (
 # 4. GEMINI CALL
 # ------------------------------------------------------------------------
 def ask_gemini(phone_number: str, user_message: str) -> str:
-    """Send message to Gemini Flash using the new google-genai SDK."""
+    """Gemini 1.5 Flash ko system prompt + history + naya message bhejo."""
+    model = genai.GenerativeModel(
+        model_name="gemini-1.5-flash",
+        system_instruction=SYSTEM_PROMPT,
+    )
+
+    history = CHAT_HISTORY.get(phone_number, [])
+
+    # Gemini chat format mein history convert karo
+    gemini_history = [
+        {"role": h["role"], "parts": [h["text"]]} for h in history
+    ]
+
     try:
-        response = client.models.generate_content(
-            model="gemini-1.5-flash",
-            contents=user_message,
-            config=types.GenerateContentConfig(
-                system_instruction=SYSTEM_PROMPT,
-            ),
-        )
+        chat = model.start_chat(history=gemini_history)
+        response = chat.send_message(user_message)
         reply_text = response.text.strip()
-        return reply_text
     except Exception as e:
         log.error(f"Gemini API error: {e}")
-        return "Mujhe abhi thodi dikkat ho rahi hai jawab dene mein."
+        # Agar Gemini fail ho jaye to safe fallback -> handover
+        return f"Mujhe abhi thodi dikkat ho rahi hai jawab dene mein. {FALLBACK_MESSAGE} {HANDOVER_TAG}"
 
+    # History update karo (max N turns rakho)
+    history.append({"role": "user", "text": user_message})
+    history.append({"role": "model", "text": reply_text})
+    CHAT_HISTORY[phone_number] = history[-(MAX_HISTORY_TURNS * 2):]
 
+    return reply_text
 
 
 def contains_human_request(text: str) -> bool:
@@ -334,7 +343,7 @@ def handle_webhook():
                 resume_bot(target)
                 send_whatsapp_message(ADMIN_NUMBER, f"✅ Bot resumed for +{target}")
             else:
-                send_whatsapp_message(ADMIN_NUMBER, "Usage: /resume 923006498489")
+                send_whatsapp_message(ADMIN_NUMBER, "Usage: /resume 923001234567")
             return jsonify({"status": "ok"}), 200
 
         # ---- Agar yeh number pehle se paused hai, bot chup rahega ----
