@@ -1,6 +1,6 @@
 """
 ================================================================================
- Concept Science Academy (KWL) - WhatsApp Hybrid AI Chatbot
+ Concept Science Academy (CWL) - WhatsApp Hybrid AI Chatbot
 ================================================================================
 Stack: Python Flask + WhatsApp Cloud API (Meta) + Google Gemini 1.5 Flash
 Hosting: Render.com (Free Tier)
@@ -28,7 +28,7 @@ import google.generativeai as genai
 GEMINI_API_KEY   = os.environ.get("GEMINI_API_KEY")
 WHATSAPP_TOKEN   = os.environ.get("WHATSAPP_TOKEN")
 PHONE_NUMBER_ID  = os.environ.get("PHONE_NUMBER_ID")
-VERIFY_TOKEN     = os.environ.get("VERIFY_TOKEN", "csa2026secret")
+VERIFY_TOKEN     = os.environ.get("VERIFY_TOKEN", "csa_verify_token")
 ADMIN_NUMBER     = os.environ.get("ADMIN_NUMBER", "923006498489")  # bina '+' aur bina space ke
 
 # Basic sanity check (Render logs mein dikhayega agar koi variable missing hai)
@@ -118,14 +118,14 @@ _load_state()
 # taake galat info student ko na jaye.
 
 SYSTEM_PROMPT = """
-Tum "Concept Science Academy (KWL)" ke official WhatsApp AI Assistant ho.
+Tum "Concept Science Academy (CWL)" ke official WhatsApp AI Assistant ho.
 Tumhara kaam hai students aur parents ke sawalat ka friendly, polite aur
 concise andaz mein jawab dena — Roman Urdu ya English mein, jis language
 mein student baat kare usi mein reply karo (natural mix bhi chalay ga,
 jaise log Pakistan mein WhatsApp par likhte hain).
 
 === ACADEMY INFORMATION (Sirf yehi authoritative data hai) ===
-- Naam: Concept Science Academy (KWL)
+- Naam: Concept Science Academy (CWL)
 - Website: csakwl.com
 - Admin / WhatsApp Contact: +92-300-649-8489
 - Location: Khanewal, Punjab, Pakistan
@@ -155,7 +155,7 @@ confirm karne ke liye Admin se connect kara rahe ho.
   koi substantial jawab de rahe ho, jaise:
   "Koi aur sawal ho to zaroor poochein. 🙌
   Regards,
-  Concept Science Academy (KWL) Support"
+  Concept Science Academy (CWL) Support"
   (Chhoti greetings ya haan/na jawabon par yeh closing zaroori nahi.)
 
 === TUMHARE RULES (bohat zaroori) ===
@@ -203,7 +203,7 @@ FALLBACK_MESSAGE = (
     "Aapki request hamare live agent ko forward kar di gayi hai, wo jald "
     "hi is chat mein shamil ho kar aapki madad karein gay. 🙏\n\n"
     "Aap chahein to seedha bhi contact kar sakte hain: +92-300-649-8489\n\n"
-    "Regards,\nConcept Science Academy (KWL) Support"
+    "Regards,\nConcept Science Academy (CWL) Support"
 )
 
 
@@ -213,7 +213,7 @@ FALLBACK_MESSAGE = (
 def ask_gemini(phone_number: str, user_message: str) -> str:
     """Gemini 1.5 Flash ko system prompt + history + naya message bhejo."""
     model = genai.GenerativeModel(
-        model_name="gemini-3.5-flash-lite",
+        model_name="gemini-1.5-flash",
         system_instruction=SYSTEM_PROMPT,
     )
 
@@ -271,17 +271,54 @@ def send_whatsapp_message(to_number: str, message_body: str):
         return None
 
 
+def send_whatsapp_template(to_number: str, template_name: str, params: list):
+    """
+    Approved WhatsApp Template message bhejta hai. Yeh business-initiated
+    messages (24-hour window ke bahar) ke liye zaroori hai -- plain text
+    is case mein kaam nahi karta, sirf approved template chalta hai.
+    """
+    headers = {
+        "Authorization": f"Bearer {WHATSAPP_TOKEN}",
+        "Content-Type": "application/json",
+    }
+    payload = {
+        "messaging_product": "whatsapp",
+        "to": to_number,
+        "type": "template",
+        "template": {
+            "name": template_name,
+            "language": {"code": "en_US"},
+            "components": [
+                {
+                    "type": "body",
+                    "parameters": [{"type": "text", "text": p} for p in params],
+                }
+            ],
+        },
+    }
+    try:
+        resp = requests.post(WHATSAPP_API_URL, headers=headers, json=payload, timeout=15)
+        if resp.status_code != 200:
+            log.error(f"WhatsApp template send failed [{resp.status_code}]: {resp.text}")
+        return resp.json()
+    except Exception as e:
+        log.error(f"WhatsApp template send exception: {e}")
+        return None
+
+
 def notify_admin(student_number: str, last_message: str):
-    """Admin ko inform karo ke kisi student ko personal attention chahiye."""
-    admin_alert = (
-        f"🔔 *Human Handover Triggered*\n"
-        f"Student: +{student_number}\n"
-        f"Last message: \"{last_message}\"\n\n"
-        f"Bot us number par abhi paused hai. Reply karne ke liye seedha "
-        f"student ko WhatsApp par message karein.\n\n"
-        f"Bot dobara chalane ke liye yahan bhejein:\n/resume {student_number}"
+    """Admin ko inform karo ke kisi student ko personal attention chahiye.
+    Yeh 'handover_alert' naam ka approved template use karta hai, kyunke
+    Admin ne agar pichle 24 ghante mein bot ko message na kiya ho, to plain
+    text WhatsApp API se reject ho jata hai (business-initiated message rule).
+    """
+    # Message ko chota rakho (WhatsApp template variables mein newline allowed nahi)
+    short_message = last_message.replace("\n", " ").strip()[:200]
+    send_whatsapp_template(
+        ADMIN_NUMBER,
+        template_name="handover_alert",
+        params=[f"+{student_number}", short_message],
     )
-    send_whatsapp_message(ADMIN_NUMBER, admin_alert)
 
 
 # ------------------------------------------------------------------------
@@ -383,7 +420,7 @@ def handle_webhook():
 def health_check():
     return jsonify({
         "status": "running",
-        "academy": "Concept Science Academy (KWL)",
+        "academy": "Concept Science Academy (CWL)",
         "paused_users": len([k for k, v in HANDOVER_STATE.items() if v.get("paused")]),
     }), 200
 
