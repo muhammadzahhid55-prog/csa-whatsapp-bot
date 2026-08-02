@@ -1,6 +1,6 @@
 """
 ================================================================================
- Concept Science Academy (CWL) - WhatsApp Hybrid AI Chatbot
+ Concept Science Academy (KWL) - WhatsApp Hybrid AI Chatbot
 ================================================================================
 Stack: Python Flask + WhatsApp Cloud API (Meta) + Google Gemini 1.5 Flash
 Hosting: Render.com (Free Tier)
@@ -118,27 +118,45 @@ _load_state()
 # taake galat info student ko na jaye.
 
 SYSTEM_PROMPT = """
-Tum "Concept Science Academy (CWL)" ke official WhatsApp AI Assistant ho.
+Tum "Concept Science Academy (KWL)" ke official WhatsApp AI Assistant ho.
 Tumhara kaam hai students aur parents ke sawalat ka friendly, polite aur
 concise andaz mein jawab dena — Roman Urdu ya English mein, jis language
 mein student baat kare usi mein reply karo (natural mix bhi chalay ga,
 jaise log Pakistan mein WhatsApp par likhte hain).
 
 === ACADEMY INFORMATION (Sirf yehi authoritative data hai) ===
-- Naam: Concept Science Academy (CWL)
+- Naam: Concept Science Academy (KWL)
 - Website: csakwl.com
 - Admin / WhatsApp Contact: +92-300-649-8489
-- Location: Khanewal, Punjab, Pakistan
+- Full Address: X Block, near Shell Petrol Pump, Khanewal
+- Google Maps: https://www.google.com/maps/place/CONCEPT+SCIENCE+ACADEMY+KHANEWAL/@30.3085966,71.9415599,14z
 
 Courses / Offerings:
 1. Metric (9th & 10th) - Science aur Arts groups
 2. Intermediate (11th & 12th) - FSc Pre-Medical, FSc Pre-Engineering, ICS
 3. Entry Test Preparation - MDCAT aur ECAT
 
-Fee Structure & Exact Class Timings:
-[FEE STRUCTURE YAHAN DALEIN — abhi available nahi hai]
-Agar student fee ya exact timings pooche, to unhe batao ke exact detail
-confirm karne ke liye Admin se connect kara rahe ho.
+Fee Structure:
+- Metric (9th/10th): Rs. 3,500/month
+- FSc Pre-Medical: Rs. 1,000 per subject
+- FSc Pre-Engineering: Rs. 1,000 per subject
+- ICS: Rs. 1,000 per subject
+- Koi Admission Fee nahi hai (No admission fee)
+
+Class Timings:
+- Metric (9th/10th): 4:30 PM se 8:30 PM tak
+- Intermediate (11th/12th): 3:30 PM se 5:30 PM tak
+- Off day: Sunday (sirf itwar ko chutti hoti hai)
+
+Faculty / Teachers:
+1. Muhammad Zahid — Computer Science — MSc Computer Science, 10 saal ka tajurba
+2. Ghulam Yasin — Math & Physics — MSc Mathematics, 20 saal ka tajurba
+3. Atif Shahzad — Biology & Chemistry — M.Phil (Chemistry), 10 saal ka tajurba
+4. Fiza Shafique — English — BS English, 5 saal ka tajurba
+
+Agar student kisi specific subject ke teacher ke baare mein pooche
+(jaise "Math kaun parhata hai?"), to upar wali list se relevant
+teacher ka naam, qualification, aur tajurba bata do.
 
 === JAWAB DENE KA STYLE (professional support jaisa) ===
 - Jab bhi mumkin ho, jawab ko structured aur clear rakho: agar steps
@@ -155,7 +173,7 @@ confirm karne ke liye Admin se connect kara rahe ho.
   koi substantial jawab de rahe ho, jaise:
   "Koi aur sawal ho to zaroor poochein. 🙌
   Regards,
-  Concept Science Academy (CWL) Support"
+  Concept Science Academy (KWL) Support"
   (Chhoti greetings ya haan/na jawabon par yeh closing zaroori nahi.)
 
 === TUMHARE RULES (bohat zaroori) ===
@@ -203,7 +221,7 @@ FALLBACK_MESSAGE = (
     "Aapki request hamare live agent ko forward kar di gayi hai, wo jald "
     "hi is chat mein shamil ho kar aapki madad karein gay. 🙏\n\n"
     "Aap chahein to seedha bhi contact kar sakte hain: +92-300-649-8489\n\n"
-    "Regards,\nConcept Science Academy (CWL) Support"
+    "Regards,\nConcept Science Academy (KWL) Support"
 )
 
 
@@ -383,6 +401,25 @@ def handle_webhook():
                 send_whatsapp_message(ADMIN_NUMBER, "Usage: /resume 923001234567")
             return jsonify({"status": "ok"}), 200
 
+        # ---- Admin Command Handling: /reply <number> <message> ----
+        # Yeh command Admin ko student ke sath "seedha usi chat mein" baat
+        # karne deta hai -- student ko yeh normal continuation lagega, kyunke
+        # message bot ke hi WhatsApp number se ja raha hai (koi alag number
+        # student ko dikhega nahi).
+        if from_number == ADMIN_NUMBER and user_text.lower().startswith("/reply"):
+            parts = user_text.split(maxsplit=2)
+            if len(parts) == 3:
+                target = parts[1].replace("+", "").strip()
+                reply_text = parts[2]
+                send_whatsapp_message(target, reply_text)
+                send_whatsapp_message(ADMIN_NUMBER, f"✅ Sent to +{target}: \"{reply_text}\"")
+            else:
+                send_whatsapp_message(
+                    ADMIN_NUMBER,
+                    "Usage: /reply 923001234567 Aapka message yahan likhein",
+                )
+            return jsonify({"status": "ok"}), 200
+
         # ---- Agar yeh number pehle se paused hai, bot chup rahega ----
         if is_paused(from_number):
             log.info(f"🔇 Bot paused for {from_number}, auto-reply skip.")
@@ -420,7 +457,7 @@ def handle_webhook():
 def health_check():
     return jsonify({
         "status": "running",
-        "academy": "Concept Science Academy (CWL)",
+        "academy": "Concept Science Academy (KWL)",
         "paused_users": len([k for k, v in HANDOVER_STATE.items() if v.get("paused")]),
     }), 200
 
