@@ -287,7 +287,7 @@ def send_whatsapp_template(to_number: str, template_name: str, params: list):
         "type": "template",
         "template": {
             "name": template_name,
-            "language": {"code": "en_US"},
+            "language": {"code": "en"},
             "components": [
                 {
                     "type": "body",
