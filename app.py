@@ -62,6 +62,11 @@ HANDOVER_STATE = {}
 CHAT_HISTORY = {}
 MAX_HISTORY_TURNS = 8  # per user, last N messages yaad rakho
 
+# Admin filhal kis student se "baat kar raha hai" -- jab bhi handover trigger
+# hota hai, yeh automatically us student par set ho jata hai. Admin ka koi
+# bhi plain (non-command) message isi number par forward hota hai.
+ACTIVE_ADMIN_TARGET = None
+
 
 def _load_state():
     """Startup par purani state file se load karo (agar mojood ho)."""
@@ -330,6 +335,9 @@ def notify_admin(student_number: str, last_message: str):
     Admin ne agar pichle 24 ghante mein bot ko message na kiya ho, to plain
     text WhatsApp API se reject ho jata hai (business-initiated message rule).
     """
+    global ACTIVE_ADMIN_TARGET
+    ACTIVE_ADMIN_TARGET = student_number  # Admin ka agla plain message isi ko jayega
+
     # Message ko chota rakho (WhatsApp template variables mein newline allowed nahi)
     short_message = last_message.replace("\n", " ").strip()[:200]
     send_whatsapp_template(
@@ -402,10 +410,8 @@ def handle_webhook():
             return jsonify({"status": "ok"}), 200
 
         # ---- Admin Command Handling: /reply <number> <message> ----
-        # Yeh command Admin ko student ke sath "seedha usi chat mein" baat
-        # karne deta hai -- student ko yeh normal continuation lagega, kyunke
-        # message bot ke hi WhatsApp number se ja raha hai (koi alag number
-        # student ko dikhega nahi).
+        # (Optional/manual tareeqa -- agar Admin kisi specific number ko
+        # target karna chahe bina "active" target badle)
         if from_number == ADMIN_NUMBER and user_text.lower().startswith("/reply"):
             parts = user_text.split(maxsplit=2)
             if len(parts) == 3:
@@ -417,6 +423,34 @@ def handle_webhook():
                 send_whatsapp_message(
                     ADMIN_NUMBER,
                     "Usage: /reply 923001234567 Aapka message yahan likhein",
+                )
+            return jsonify({"status": "ok"}), 200
+
+        # ---- Admin Command Handling: /switch <number> ----
+        # Agar ek se zyada students wait kar rahe hon, Admin isay use kar ke
+        # "active" conversation badal sakta hai.
+        if from_number == ADMIN_NUMBER and user_text.lower().startswith("/switch"):
+            global ACTIVE_ADMIN_TARGET
+            parts = user_text.split()
+            if len(parts) == 2:
+                ACTIVE_ADMIN_TARGET = parts[1].replace("+", "").strip()
+                send_whatsapp_message(ADMIN_NUMBER, f"🔀 Active chat switched to +{ACTIVE_ADMIN_TARGET}")
+            else:
+                send_whatsapp_message(ADMIN_NUMBER, "Usage: /switch 923001234567")
+            return jsonify({"status": "ok"}), 200
+
+        # ---- Admin ka PLAIN message (koi command nahi) -> active student ko forward ----
+        # Yeh Admin ke liye sabse aasan tareeqa hai: bas normal type karo,
+        # bot khud us student ko bhej dega jisne abhi handover trigger kiya tha.
+        if from_number == ADMIN_NUMBER and not user_text.startswith("/"):
+            if ACTIVE_ADMIN_TARGET:
+                send_whatsapp_message(ACTIVE_ADMIN_TARGET, user_text)
+                log.info(f"↪️ Admin -> {ACTIVE_ADMIN_TARGET}: {user_text}")
+            else:
+                send_whatsapp_message(
+                    ADMIN_NUMBER,
+                    "⚠️ Abhi koi active student conversation nahi hai. "
+                    "/switch 923001234567 use karein pehle.",
                 )
             return jsonify({"status": "ok"}), 200
 
