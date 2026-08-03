@@ -362,6 +362,29 @@ def send_whatsapp_message(to_number: str, message_body: str):
         return None
 
 
+def show_typing_indicator(message_id: str):
+    """Incoming message ko 'read' mark karta hai aur WhatsApp mein
+    'typing...' bubble dikhata hai (Meta ka official typing_indicator
+    feature). Yeh bubble khud-b-khud gayab ho jata hai jab hum asal
+    reply bhej dete hain, ya 25 second baad (jo bhi pehle ho)."""
+    headers = {
+        "Authorization": f"Bearer {WHATSAPP_TOKEN}",
+        "Content-Type": "application/json",
+    }
+    payload = {
+        "messaging_product": "whatsapp",
+        "status": "read",
+        "message_id": message_id,
+        "typing_indicator": {"type": "text"},
+    }
+    try:
+        resp = requests.post(WHATSAPP_API_URL, headers=headers, json=payload, timeout=10)
+        if resp.status_code != 200:
+            log.error(f"Typing indicator failed [{resp.status_code}]: {resp.text}")
+    except Exception as e:
+        log.error(f"Typing indicator exception: {e}")
+
+
 def send_whatsapp_template(to_number: str, template_name: str, params: list):
     """
     Approved WhatsApp Template message bhejta hai. Yeh business-initiated
@@ -454,6 +477,13 @@ def handle_webhook():
         message = messages[0]
         from_number = message.get("from")  # e.g. "923001234567"
         msg_type = message.get("type")
+        message_id = message.get("id")
+
+        # Turant 'typing...' bubble dikha do (student ko lagega bot jawab
+        # tayyar kar raha hai) -- Gemini call se pehle, taake wait ka time
+        # zyada awkward na lage.
+        if message_id:
+            show_typing_indicator(message_id)
 
         if msg_type != "text":
             send_whatsapp_message(
