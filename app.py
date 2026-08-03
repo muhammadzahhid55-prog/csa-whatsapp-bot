@@ -16,7 +16,7 @@ import os
 import json
 import logging
 import threading
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import requests
 from flask import Flask, request, jsonify
@@ -53,6 +53,9 @@ WHATSAPP_API_URL = f"https://graph.facebook.com/v20.0/{PHONE_NUMBER_ID}/messages
 # ho bhi jaye, memory dictionary fori (immediate) source of truth hai.
 STATE_FILE = "handover_state.json"
 _state_lock = threading.Lock()
+
+# Kitni dair tak student ki inactivity ke baad pause khud-b-khud khatam ho
+PAUSE_TIMEOUT = timedelta(minutes=5)
 
 # Structure: { "923001234567": {"paused": True, "since": "2026-07-31T10:00:00", "reason": "..."} }
 HANDOVER_STATE = {}
@@ -91,13 +94,40 @@ def _save_state():
 
 
 def is_paused(phone_number: str) -> bool:
-    return HANDOVER_STATE.get(phone_number, {}).get("paused", False)
+    """Check karta hai ke number paused hai ya nahi. Agar paused hai lekin
+    5 minute se student ki taraf se koi naya message nahi aaya (inactivity),
+    to automatically resume kar deta hai."""
+    state = HANDOVER_STATE.get(phone_number, {})
+    if not state.get("paused", False):
+        return False
+
+    last_activity = state.get("last_activity") or state.get("since")
+    if last_activity:
+        try:
+            elapsed = datetime.utcnow() - datetime.fromisoformat(last_activity)
+            if elapsed > PAUSE_TIMEOUT:
+                resume_bot(phone_number)
+                log.info(f"⏰ Pause auto-expired for {phone_number} (5 min inactivity).")
+                return False
+        except ValueError:
+            pass
+    return True
+
+
+def touch_pause(phone_number: str):
+    """Har naye student message par 'last_activity' timestamp reset karta
+    hai, taake 5-minute inactivity timer dobara shuru ho jaye."""
+    if phone_number in HANDOVER_STATE:
+        HANDOVER_STATE[phone_number]["last_activity"] = datetime.utcnow().isoformat()
+        _save_state()
 
 
 def pause_bot(phone_number: str, reason: str = "handover"):
+    now = datetime.utcnow().isoformat()
     HANDOVER_STATE[phone_number] = {
         "paused": True,
-        "since": datetime.utcnow().isoformat(),
+        "since": now,
+        "last_activity": now,
         "reason": reason,
     }
     _save_state()
@@ -229,6 +259,19 @@ FALLBACK_MESSAGE = (
     "Regards,\nConcept Science Academy (KWL) Support"
 )
 
+# Keywords jo student khud use kar ke bot par WAPIS aa sakta hai (jab wo
+# pehle handover ki wajah se paused ho chuka ho)
+BOT_RESUME_KEYWORDS = [
+    "chatbot se baat", "bot se baat", "wapis bot", "wapis chatbot",
+    "connect me to chatbot", "connect to chatbot", "chatbot chahiye",
+    "bot chahiye", "resume bot", "back to bot", "chatbot par",
+]
+
+RESUME_CONFIRM_MESSAGE = (
+    "Theek hai! Main dobara aapki madad ke liye ready hoon. 🙂\n"
+    "Bataiye, kis cheez mein madad chahiye?"
+)
+
 
 # ------------------------------------------------------------------------
 # 4. GEMINI CALL
@@ -267,6 +310,11 @@ def ask_gemini(phone_number: str, user_message: str) -> str:
 def contains_human_request(text: str) -> bool:
     lowered = text.lower()
     return any(keyword in lowered for keyword in HUMAN_REQUEST_KEYWORDS)
+
+
+def contains_bot_resume_request(text: str) -> bool:
+    lowered = text.lower()
+    return any(keyword in lowered for keyword in BOT_RESUME_KEYWORDS)
 
 
 # ------------------------------------------------------------------------
@@ -454,9 +502,25 @@ def handle_webhook():
                 )
             return jsonify({"status": "ok"}), 200
 
-        # ---- Agar yeh number pehle se paused hai, bot chup rahega ----
+        # ---- Agar yeh number pehle se paused hai ----
         if is_paused(from_number):
-            log.info(f"🔇 Bot paused for {from_number}, auto-reply skip.")
+            # Student khud "wapis bot chahiye" keh sakta hai -- is case mein
+            # bot khud-b-khud us ke liye resume ho jata hai (Admin ka wait
+            # nahi karna padta).
+            if contains_bot_resume_request(user_text):
+                resume_bot(from_number)
+                send_whatsapp_message(from_number, RESUME_CONFIRM_MESSAGE)
+                log.info(f"🔄 Student {from_number} ne khud bot resume kiya.")
+                return jsonify({"status": "self_resumed"}), 200
+
+            # Pause abhi active hai -- iska matlab Admin aur student pehle se
+            # baat kar rahe hain. Student ka yeh naya message Admin ko
+            # forward kar do (taake conversation continue rahe), aur
+            # inactivity timer reset kar do (5 minute dobara shuru).
+            touch_pause(from_number)
+            ACTIVE_ADMIN_TARGET = from_number
+            send_whatsapp_message(ADMIN_NUMBER, f"💬 +{from_number}: {user_text}")
+            log.info(f"🔇 Bot paused for {from_number}, message forwarded to Admin.")
             return jsonify({"status": "paused"}), 200
 
         # ---- Fast-path: direct human request keywords ----
