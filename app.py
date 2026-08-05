@@ -479,17 +479,17 @@ def download_whatsapp_media(media_id: str):
 
 def transcribe_audio(audio_bytes: bytes, mime_type: str) -> str:
     """Gemini ko audio bhej kar uska matn (text) nikalta hai. Agar Roman
-    Urdu/Urdu mein bola gaya ho, transcription bhi Roman Urdu mein aati hai."""
-    tmp_path = "/tmp/voice_note.ogg"
+    Urdu/Urdu mein bola gaya ho, transcription bhi Roman Urdu mein aati hai.
+    Audio ko seedha inline bytes ke tor par bhejte hain (Files API/upload
+    step use nahi karte, taake extra permission issues na aayen)."""
     try:
-        with open(tmp_path, "wb") as f:
-            f.write(audio_bytes)
+        # WhatsApp mime_type mein kabhi kabhi ";codecs=opus" jaisa extra
+        # hissa hota hai -- Gemini ko sirf clean mime_type chahiye.
+        clean_mime = mime_type.split(";")[0].strip() if mime_type else "audio/ogg"
 
-        uploaded = genai.upload_file(path=tmp_path, mime_type=mime_type)
         model = genai.GenerativeModel(model_name="gemini-3.5-flash-lite")
-     
         response = model.generate_content([
-            uploaded,
+            {"mime_type": clean_mime, "data": audio_bytes},
             "Is voice message ko exactly transcribe karo jaisa bola gaya hai. "
             "Agar Roman Urdu ya Urdu mein bola gaya hai to Roman Urdu (English "
             "letters) mein likho. Sirf transcription do, aur kuch nahi likhna.",
@@ -498,9 +498,6 @@ def transcribe_audio(audio_bytes: bytes, mime_type: str) -> str:
     except Exception as e:
         log.error(f"Audio transcription failed: {e}")
         return ""
-    finally:
-        if os.path.exists(tmp_path):
-            os.remove(tmp_path)
 
 
 # ------------------------------------------------------------------------
