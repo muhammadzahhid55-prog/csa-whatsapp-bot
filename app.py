@@ -455,6 +455,54 @@ def verify_webhook():
         return "Verification failed", 403
 
 
+def download_whatsapp_media(media_id: str):
+    """WhatsApp se media (voice note waghera) download karta hai.
+    Return: (audio_bytes, mime_type) ya (None, None) agar fail ho jaye."""
+    headers = {"Authorization": f"Bearer {WHATSAPP_TOKEN}"}
+    try:
+        # Step 1: media_id se actual download URL lo
+        meta_resp = requests.get(
+            f"https://graph.facebook.com/v20.0/{media_id}", headers=headers, timeout=15
+        )
+        meta_resp.raise_for_status()
+        media_url = meta_resp.json().get("url")
+        mime_type = meta_resp.json().get("mime_type", "audio/ogg")
+
+        # Step 2: usi URL se raw audio bytes download karo
+        file_resp = requests.get(media_url, headers=headers, timeout=20)
+        file_resp.raise_for_status()
+        return file_resp.content, mime_type
+    except Exception as e:
+        log.error(f"Media download failed: {e}")
+        return None, None
+
+
+def transcribe_audio(audio_bytes: bytes, mime_type: str) -> str:
+    """Gemini ko audio bhej kar uska matn (text) nikalta hai. Agar Roman
+    Urdu/Urdu mein bola gaya ho, transcription bhi Roman Urdu mein aati hai."""
+    tmp_path = "/tmp/voice_note.ogg"
+    try:
+        with open(tmp_path, "wb") as f:
+            f.write(audio_bytes)
+
+        uploaded = genai.upload_file(path=tmp_path, mime_type=mime_type)
+        model = genai.GenerativeModel(model_name="gemini-3.5-flash-lite")
+     
+        response = model.generate_content([
+            uploaded,
+            "Is voice message ko exactly transcribe karo jaisa bola gaya hai. "
+            "Agar Roman Urdu ya Urdu mein bola gaya hai to Roman Urdu (English "
+            "letters) mein likho. Sirf transcription do, aur kuch nahi likhna.",
+        ])
+        return response.text.strip()
+    except Exception as e:
+        log.error(f"Audio transcription failed: {e}")
+        return ""
+    finally:
+        if os.path.exists(tmp_path):
+            os.remove(tmp_path)
+
+
 # ------------------------------------------------------------------------
 # 7. WEBHOOK -- POST (Incoming Messages)
 # ------------------------------------------------------------------------
@@ -485,15 +533,40 @@ def handle_webhook():
         if message_id:
             show_typing_indicator(message_id)
 
-        if msg_type != "text":
+        if msg_type == "audio":
+            media_id = message.get("audio", {}).get("id")
+            audio_bytes, mime_type = download_whatsapp_media(media_id) if media_id else (None, None)
+            if not audio_bytes:
+                send_whatsapp_message(
+                    from_number,
+                    "Maaf kijiye, aapka voice message download nahi ho saka. "
+                    "Barah-e-karam text mein likh kar bhej dein. 🙏",
+                )
+                return jsonify({"status": "ok"}), 200
+
+            user_text = transcribe_audio(audio_bytes, mime_type)
+            if not user_text:
+                send_whatsapp_message(
+                    from_number,
+                    "Maaf kijiye, main aapka voice message samajh nahi saka. "
+                    "Barah-e-karam text mein likh kar bhej dein. 🙏",
+                )
+                return jsonify({"status": "ok"}), 200
+
+            log.info(f"🎙️ Transcribed from {from_number}: {user_text}")
+            # Yahan se aage user_text normal text-message flow mein chala jayega
+            # (neeche wala code) -- koi alag logic nahi likhna padega.
+
+        elif msg_type != "text":
             send_whatsapp_message(
                 from_number,
-                "Filhal main sirf text messages samajh sakta hoon. Barah-e-karam "
-                "apna sawal likh kar bhejein. 🙏",
+                "Filhal main sirf text aur voice messages samajh sakta hoon. "
+                "Barah-e-karam apna sawal likh kar ya bol kar bhejein. 🙏",
             )
             return jsonify({"status": "ok"}), 200
+        else:
+            user_text = message["text"]["body"].strip()
 
-        user_text = message["text"]["body"].strip()
         log.info(f"📩 From {from_number}: {user_text}")
 
         # ---- Admin Command Handling: /resume <number> ----
